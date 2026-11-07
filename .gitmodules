@@ -1,0 +1,6 @@
+# ikd-tree 是独立仓库；主仓库锁定子模块提交，branch 信息不代表每次自动使用分支最新代码。
+# 首次克隆后用 git submodule update --init --recursive 恢复锁定版本。
+[submodule "include/ikd-Tree"]
+	path = include/ikd-Tree
+	url = https://github.com/hku-mars/ikd-Tree.git
+	branch = fast_lio

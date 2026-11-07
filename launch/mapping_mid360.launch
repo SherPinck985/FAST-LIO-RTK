@@ -1,0 +1,38 @@
+<!-- Livox MID360：使用 CustomMsg 和示例外参；lidar_type=1 不只表示 Avia。
+     本文件只启动 fastlio_mapping 和可选 RViz；驱动、rosbag 或仿真数据由外部提供。
+     YAML 提供传感器/噪声/外参/输出设置，下面的顶层参数提供采样和地图等设置。 -->
+<launch>
+<!-- Launch file for Livox MID360 LiDAR -->
+
+	<!-- 显示开关，可通过 rviz:=false 关闭；不影响估计器本身。 -->
+	<arg name="rviz" default="true" />
+	<arg name="rtk" default="false" />
+
+	<!-- 将对应 YAML 加载到当前 ROS 命名空间，供 main 的普通 NodeHandle 读取。 -->
+	<rosparam command="load" file="$(find fast_lio)/config/mid360.yaml" />
+	<!-- 仍使用同一个节点与 YAML，通过开关选择纯 LIO 或 RTK 融合。 -->
+	<param name="rtk/enable" type="bool" value="$(arg rtk)" />
+
+	<!-- 关闭时使用筛选后的原始点；开启时走扫描线特征提取，主程序仍接收 pl_surf。 -->
+	<param name="feature_extract_enable" type="bool" value="0"/>
+	<!-- 预处理抽样间隔，必须为正整数；MARSIM handler 当前不使用该抽样参数。 -->
+	<param name="point_filter_num" type="int" value="3"/>
+	<!-- 滤波迭代配置；求解器内部可能提前结束，不是独立运行若干次 ICP 节点。 -->
+	<param name="max_iteration" type="int" value="3" />
+	<!-- 扫描 VoxelGrid 的体素边长，单位米，控制本帧参与匹配的点数。 -->
+	<param name="filter_size_surf" type="double" value="0.5" />
+	<!-- 地图插入/树内降采样的体素边长，单位米，与扫描体素作用不同。 -->
+	<param name="filter_size_map" type="double" value="0.5" />
+	<!-- 局部地图立方体边长，单位米；与 YAML det_range 共同影响窗口移动。 -->
+	<param name="cube_side_length" type="double" value="1000" />
+	<!-- 开启更新后状态和性能统计；false 不等于关闭所有日志文件或 mat_pre 写入。 -->
+	<param name="runtime_pos_log_enable" type="bool" value="0" />
+    <!-- 同一个核心程序：包名 fast_lio，可执行文件 fastlio_mapping，节点名 laserMapping。 -->
+    <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" /> 
+
+	<!-- 可选可视化：loam_livox.rviz 固定世界系为 camera_init，部分显示累计历史扫描。 -->
+	<group if="$(arg rviz)">
+	<node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d $(find fast_lio)/rviz_cfg/loam_livox.rviz" />
+	</group>
+
+</launch>

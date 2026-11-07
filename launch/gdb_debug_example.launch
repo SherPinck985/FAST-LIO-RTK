@@ -1,0 +1,38 @@
+<!-- GDB 调试示例：launch-prefix 在调试器下运行节点，不是完整的传感器运行配置。
+     本文件未加载 YAML，外参也未配置；使用时应以正常 mapping launch 的有效配置为基础。
+     node 内的 param 为私有参数，当前 main 使用普通 NodeHandle 读取，不能假定这些值会生效。
+     此处保留原参数和命名空间，只补充说明。 -->
+<launch>
+
+  <!-- 原 RViz group 已被注释，所以这个 arg 当前不会实际启动 RViz。 -->
+  <arg name="rviz" default="true" />
+
+  <!-- required=true：该节点退出时停止本 launch；GDB 启动前缀不自动纠正参数配置。 -->
+  <node pkg="fast_lio" type="fastlio_mapping" name="laserMapping" output="screen" required="true" launch-prefix="gdb -ex run --args">
+	<!-- 历史键名；当前读取 common/imu_topic，且这里位于节点私有命名空间。 -->
+	<param name="imu_topic" type="string" value="/livox/imu" />
+	<!-- 当前虽读取同名配置，但没有据此加载已有地图；这里值也不提供实际地图。 -->
+	<param name="map_file_path" type="string" value=" " />
+	<!-- 迭代次数示例；当前 main 不从私有命名空间读取该键。 -->
+	<param name="max_iteration" type="int" value="4" />
+	<!-- 历史参数，当前 main 没有读取此键；世界系扫描密度由 publish/dense_publish_en 控制。 -->
+	<param name="dense_map_enable" type="bool" value="1" />
+	<!-- 当前键路径是 mapping/fov_degree，而且其计算量未参与实际角度裁剪。 -->
+	<param name="fov_degree" type="double" value="75" />
+	<!-- 历史角点采样配置，当前没有独立角点匹配路径使用它。 -->
+	<param name="filter_size_corner" type="double" value="0.2" />
+	<!-- 扫描 VoxelGrid 的体素边长，单位米，控制本帧参与匹配的点数。 -->
+	<param name="filter_size_surf" type="double" value="0.2" />
+	<!-- 地图插入/树内降采样的体素边长，单位米，与扫描体素作用不同。 -->
+	<param name="filter_size_map" type="double" value="0.5" />
+	<!-- 开启更新后状态和性能统计；false 不等于关闭所有日志文件或 mat_pre 写入。 -->
+	<param name="runtime_pos_log_enable" type="bool" value="1" />
+	<!-- 局部地图立方体边长，单位米；与 YAML det_range 共同影响窗口移动。 -->
+	<param name="cube_side_length" type="double" value="2000" />
+  </node>
+
+  <!-- <group if="$(arg rviz)">
+    <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d $(find fast_lio)/rviz_cfg/loam_livox.rviz" />
+  </group> -->
+
+</launch>

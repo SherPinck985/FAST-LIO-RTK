@@ -1,0 +1,10 @@
+# 忽略构建和运行生成的日志/点云，以及部分本地编辑器设置。
+build
+Log/*.png
+Log/*.txt
+Log/*.csv
+Log/*.pdf
+.vscode/c_cpp_properties.json
+.vscode/settings.json
+PCD/*.pcd
+Thread

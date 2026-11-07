@@ -1,0 +1,84 @@
+# Livox MID360：使用 CustomMsg 和示例外参；lidar_type=1 不只表示 Avia。
+# 由 launch/mapping_mid360.launch 加载，参数在节点启动时读取，不会运行中自动重读。
+# 抽样、扫描/地图体素、迭代次数和立方体边长主要在对应 launch 中设置。
+# Livox 的 offset_time 在 handler 中直接由纳秒转成毫秒，不依赖 timestamp_unit。
+
+# 输入话题与时间：由 main 读取，IMU 的时间修正在 imu_cbk 中执行。
+common:
+    # LiDAR 订阅话题。type=1 使用 CustomMsg；type=2/3/4 使用 PointCloud2。
+    lid_topic:  "/livox/lidar"
+    # IMU 订阅话题，消息类型 sensor_msgs/Imu；时间轴应与 LiDAR 对齐。
+    imu_topic:  "/livox/imu"
+    # 开启 Livox 回调的一次性简易时间差估算，不是硬件同步或持续在线时延估计。
+    # 硬件时间已对齐时保持 false；type=2/3/4 没有 Livox 回调的估算入口。
+    time_sync_en: false
+    # 固定时间偏移，单位秒：通常修正后 IMU 时间 = 原 IMU 时间 - 此值。
+    # 若简易自同步条件满足，代码会覆盖为原时间 + 估算偏移；两者不是相加。未知偏移用 0。
+    time_offset_lidar_to_imu: 0.0
+
+# 输入适配：输出统一 LiDAR 系点云；内部 curvature 一律表示毫秒偏移。
+preprocess:
+    # 适配分支：1=Livox CustomMsg，2=Velodyne，3=Ouster，4=MARSIM；不自动适配任意驱动字段。
+    lidar_type: 1
+    # 扫描线数量，应与输入 line/ring 匹配。名称 VELO16 不限制只能 16 线，内部缓存上限 128。
+    scan_line: 4
+    # 近距离盲区半径，单位米；过滤距离过近的点，过大将减少可匹配结构。
+    blind: 0.5
+
+# 传播与地图配置：噪声交给 ImuProcess，外参初始化 state_ikfom，范围参数用于局部树维护。
+mapping:
+    # 加速度传播噪声的对角量，直接写入 Q；代码不再统一将输入当标准差平方。
+    acc_cov: 0.1
+    # 角速度传播噪声的对角量，直接写入 Q；应与传感器单位和噪声约定一致。
+    gyr_cov: 0.1
+    # 加速度偏置随机游走噪声的对角量，影响偏置不确定性的传播。
+    b_acc_cov: 0.0001
+    # 陀螺仪偏置随机游走噪声的对角量，与测量白噪声分别配置。
+    b_gyr_cov: 0.0001
+    # 名义视场角，度；当前被读取并计算中间量，但未参与实际的角度视场裁剪。
+    fov_degree:    360
+    # 距离尺度，米；用于局部地图立方体接近边界时的移动判断，不是逐点硬截断半径。
+    det_range:     100.0
+    # 是否构造在线外参旋转/平移观测雅可比；false 使对应列为零，外参状态仍保留。
+    extrinsic_est_en:  false
+    # LiDAR 原点在 IMU 系的位置 [tx,ty,tz]，单位米；p_I = R_IL*p_L + t_IL。
+    # 示例数值不能代替实际标定；必须提供 3 个元素。
+    extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
+    # LiDAR -> IMU 的 3x3 旋转矩阵，按行展开为 9 个元素，不是反方向外参或欧拉角。
+    extrinsic_R: [ 1, 0, 0,
+                   0, 1, 0,
+                   0, 0, 1]
+
+# ROS 展示开关：只影响对应发布行为，不替代匹配点云的降采样设置。
+publish:
+    # 发布 /path；路径函数每 10 次调用保留一个位姿。false 时可能没有路径消息。
+    path_en:  false
+    # 发布 /cloud_registered；false 同时阻止主循环的 body 点云发布，但不关闭 PCD 保存。
+    scan_publish_en:  true
+    # 世界系发布使用完整去畸变扫描(true)或扫描降采样点(false)；不改变匹配和 PCD 来源。
+    dense_publish_en: true
+    # 发布 /cloud_registered_body，坐标系为 IMU body；还要求 scan_publish_en=true。
+    scan_bodyframe_pub_en: true
+
+# 离线点云保存：累计世界系去畸变扫描，与在线 ikd-tree 有效点地图独立。
+pcd_save:
+    # 开启 PCD 累积/写盘，保存完整去畸变扫描。会增加内存与 I/O 开销，性能比较应固定此设置。
+    pcd_save_en: true
+    # 每多少帧保存一个 scans_N.pcd：正数为分块保存；-1 累积到退出写 scans.pcd。
+    # 分块后退出仍会保存剩余点；非正数不周期清空，大序列需关注内存。
+    interval: -1
+
+# 单机 RTK 融合：启动时保持静止，沿用原 FAST-LIO 的 IMU 初始化，再移动求 ENU 对齐。
+rtk:
+    enable: false
+    topic: /rtk/fix
+    # p_I = R_IG*p_G + t_IG；以下为占位值，应填写已知天线到 IMU 外参。
+    # t_IG 是从 IMU 原点指向天线参考点的向量，在 IMU 系表达，单位米。
+    extrinsic_T: [0.0, 0.0, 0.0]
+    extrinsic_R: [1.0, 0.0, 0.0,
+                  0.0, 1.0, 0.0,
+                  0.0, 0.0, 1.0]
+    align_distance: 5.0       # 初始化水平移动距离，单位米。
+    align_min_samples: 10    # 用于求偏航和平移的最少配对数。
+    max_std: 1.0             # 允许的位置标准差上限，单位米。
+    wait_sec: 0.1            # 接收扫描后给 RTK 预留的短等待窗口。
